@@ -1,0 +1,23 @@
+{
+  "name": "gbrain-recipes-outlook",
+  "version": "0.1.0",
+  "description": "Outlook-to-Brain ingestion recipe for gbrain via @softeria/ms-365-mcp-server",
+  "type": "module",
+  "scripts": {
+    "collect": "node outlook-collector/collector.mjs collect",
+    "digest": "node outlook-collector/collector.mjs digest",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0"
+  },
+  "peerDependencies": {
+    "@softeria/ms-365-mcp-server": ">=1.0.0"
+  },
+  "devDependencies": {
+    "bun-types": "latest"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
