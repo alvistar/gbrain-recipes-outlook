@@ -4,7 +4,7 @@ import { execSync } from 'child_process';
 
 export function probeServer() {
   try {
-    execSync('npx @softeria/ms-365-mcp-server --help', {
+    execSync('npx --no-install @softeria/ms-365-mcp-server --help', {
       stdio: 'pipe',
       timeout: 15000,
     });
@@ -38,7 +38,7 @@ export async function createClient(preset = 'mail,users') {
   return { client, transport };
 }
 
-export async function disconnect({ client, transport }) {
+export async function disconnect({ client }) {
   try {
     await client.close();
   } catch {}

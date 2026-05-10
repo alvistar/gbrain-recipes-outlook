@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, mkdirSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { createHash } from 'crypto';
+import { parseToolResult } from './mcp-utils.mjs';
 
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -34,7 +35,7 @@ export async function lookupUser(client, email, cacheDir) {
 
   try {
     const result = await directCallTool(client, 'list-users', {
-      $filter: `mail eq '${email}'`,
+      $filter: `mail eq '${escapeODataString(email)}'`,
     });
 
     const users = parseToolResult(result);
@@ -73,20 +74,25 @@ export async function refreshCache(client, cacheDir) {
 }
 
 export async function enrichWithDirectory(client, messages, cacheDir) {
-  const seen = new Set();
+  const seen = new Map();
   const enriched = [];
 
   for (const msg of messages) {
     const email = msg.from?.emailAddress?.address;
-    if (!email || seen.has(email)) {
-      enriched.push(msg);
+    if (!email) {
+      enriched.push({ ...msg });
       continue;
     }
-    seen.add(email);
 
-    const userData = await lookupUser(client, email, cacheDir);
+    if (!seen.has(email)) {
+      const userData = await lookupUser(client, email, cacheDir);
+      seen.set(email, userData);
+    }
+
+    const userData = seen.get(email);
+    const copy = { ...msg };
     if (userData) {
-      msg._directory = {
+      copy._directory = {
         displayName: userData.displayName,
         jobTitle: userData.jobTitle,
         department: userData.department,
@@ -94,10 +100,14 @@ export async function enrichWithDirectory(client, messages, cacheDir) {
         officeLocation: userData.officeLocation,
       };
     }
-    enriched.push(msg);
+    enriched.push(copy);
   }
 
   return enriched;
+}
+
+function escapeODataString(value) {
+  return value.replace(/'/g, "''");
 }
 
 function cacheKey(email) {
@@ -108,7 +118,7 @@ async function lookupUserFresh(client, email, cacheDir) {
   const cacheFile = join(cacheDir, cacheKey(email) + '.json');
   try {
     const result = await directCallTool(client, 'list-users', {
-      $filter: `mail eq '${email}'`,
+      $filter: `mail eq '${escapeODataString(email)}'`,
     });
     const users = parseToolResult(result);
     const userData = users && users.length > 0 ? users[0] : null;
@@ -123,17 +133,3 @@ async function lookupUserFresh(client, email, cacheDir) {
   }
 }
 
-function parseToolResult(result) {
-  if (!result || !result.content) return null;
-  for (const block of result.content) {
-    if (block.type === 'text') {
-      try {
-        const parsed = JSON.parse(block.text);
-        return Array.isArray(parsed) ? parsed : parsed.value || [parsed];
-      } catch {
-        return null;
-      }
-    }
-  }
-  return null;
-}
