@@ -24,7 +24,9 @@ export MS365_MCP_CLIENT_ID=<your-azure-ad-app-client-id>
 export MS365_MCP_TENANT_ID=<your-azure-ad-tenant-id>
 
 # 4. Run the collector
-node outlook-collector/collector.mjs collect
+# Defaults to Inbox + Archive + Sent Items with a 2h overlap window so
+# messages replied to and archived between polling cycles are still captured.
+node outlook-collector/collector.mjs collect --folders inbox,archive,sentitems --lookback 2h
 node outlook-collector/collector.mjs digest
 
 # 5. Tell gbrain where to find the recipe
@@ -54,8 +56,18 @@ Agent reads digest, enriches brain pages
 
 ## Cron Setup
 
+Poll every 10 minutes with a 2-hour safety lookback across Inbox, Archive, and
+Sent Items. The overlap plus message-ID/conversation-ID state prevents missing
+messages that were replied to and archived before the next poll.
+
 ```bash
-*/30 * * * * cd /path/to/gbrain-recipes-outlook && node outlook-collector/collector.mjs collect && node outlook-collector/collector.mjs digest
+*/10 * * * * cd /path/to/gbrain-recipes-outlook && node outlook-collector/collector.mjs collect --folders inbox,archive,sentitems --lookback 2h && node outlook-collector/collector.mjs digest
+```
+
+For a daily repair/reconciliation pass, use a wider lookback:
+
+```bash
+0 3 * * * cd /path/to/gbrain-recipes-outlook && node outlook-collector/collector.mjs collect --folders inbox,archive,sentitems --lookback 7d && node outlook-collector/collector.mjs digest
 ```
 
 ## License

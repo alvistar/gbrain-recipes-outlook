@@ -35,6 +35,7 @@ function freshState() {
   return {
     lastCollect: null,
     knownIds: {},
+    folders: {},
   };
 }
 
