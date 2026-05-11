@@ -6,7 +6,8 @@ import { collectRecentMail, parseFolders } from './lib/mail.mjs';
 import { classifyMessages } from './lib/filter.mjs';
 import { probeOrgMode, enrichWithDirectory } from './lib/directory.mjs';
 import { generateDigest, writeDigest } from './lib/digest.mjs';
-import { writeFileSync, readFileSync, mkdirSync } from 'fs';
+import { writeCollectionArtifacts } from './lib/artifacts.mjs';
+import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -50,23 +51,22 @@ async function collect() {
       enrichedMessages = await enrichWithDirectory(client, messages, CACHE_DIR);
     }
 
-    mkdirSync(join(DATA_DIR, 'messages'), { recursive: true });
-    const today = new Date().toISOString().split('T')[0];
-    const messagesFile = join(DATA_DIR, 'messages', `${today}.json`);
-    writeFileSync(
-      messagesFile,
-      JSON.stringify({ messages: enrichedMessages, sentIds: [...sentIds] }, null, 2)
-    );
+    const now = new Date();
+    const artifacts = writeCollectionArtifacts(DATA_DIR, {
+      messages: enrichedMessages,
+      sentIds,
+      date: now,
+    });
 
-    const classified = classifyMessages(enrichedMessages);
-    const digestContent = generateDigest(classified, sentIds, new Date());
-    writeDigest(DATA_DIR, digestContent, new Date());
+    const classified = classifyMessages(artifacts.dailyMessages);
+    const digestContent = generateDigest(classified, artifacts.dailySentIds, now);
+    writeDigest(DATA_DIR, digestContent, now);
 
-    state.lastCollect = new Date().toISOString();
+    state.lastCollect = now.toISOString();
     saveState(DATA_DIR, state);
 
     const folderList = parseFolders(options.folders).join(',');
-    console.log(`Collected ${messages.length} new/updated messages from ${folderList}. Digest generated.`);
+    console.log(`Collected ${messages.length} new/updated messages from ${folderList}. Daily aggregate has ${artifacts.dailyMessages.length} messages. Digest generated.`);
   } finally {
     await disconnect({ client });
   }
