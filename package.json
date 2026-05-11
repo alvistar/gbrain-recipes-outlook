@@ -12,7 +12,7 @@
     "@modelcontextprotocol/sdk": "^1.29.0"
   },
   "peerDependencies": {
-    "@softeria/ms-365-mcp-server": ">=1.0.0"
+    "@softeria/ms-365-mcp-server": ">=0.107.0 <1.0.0"
   },
   "devDependencies": {
     "bun-types": "latest"
