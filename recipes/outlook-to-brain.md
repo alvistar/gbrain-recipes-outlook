@@ -97,10 +97,11 @@ Outlook Collector Script (deterministic Node.js)
   |  Handles: pagination, dedup, sent-mail checks, folder moves, noise filtering,
   |           signature detection, directory cache
   v  Outputs:
-  +-- data/messages/{YYYY-MM-DD}.json     (structured email data)
-  +-- data/directory/{hash}.json          (cached directory lookups, 7d TTL)
-  +-- data/digests/{YYYY-MM-DD}.md        (markdown digest for agent)
-  +-- data/state.json                     (pagination state, known IDs)
+  +-- data/runs/{YYYY-MM-DD}/{RUN_ID}.json (per-collection delta)
+  +-- data/messages/{YYYY-MM-DD}.json      (cumulative daily aggregate)
+  +-- data/directory/{hash}.json           (cached directory lookups, 7d TTL)
+  +-- data/digests/{YYYY-MM-DD}.md         (markdown digest for agent)
+  +-- data/state.json                      (pagination state, known IDs/folders)
   |
   v
 Agent reads digest
@@ -227,7 +228,10 @@ node outlook-collector/collector.mjs digest
 
 Verify: `ls data/digests/` should show today's digest file. Read the digest.
 Confirm it contains real emails with working Outlook links. Run collect twice in
-one minute and verify the second run does not duplicate messages.
+one minute and verify the second run does not duplicate messages. Also verify
+`data/runs/YYYY-MM-DD/` contains one file per run and
+`data/messages/YYYY-MM-DD.json` remains cumulative rather than being replaced by
+an empty later run.
 
 ### Step 4: Enrich Brain Pages
 

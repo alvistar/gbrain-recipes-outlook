@@ -45,7 +45,8 @@ Microsoft 365 Account
   v
 Collector Script (deterministic, no LLM calls)
   |  Outputs:
-  +-- data/messages/{YYYY-MM-DD}.json
+  +-- data/runs/{YYYY-MM-DD}/{RUN_ID}.json (per-collection delta)
+  +-- data/messages/{YYYY-MM-DD}.json      (cumulative daily aggregate)
   +-- data/directory/{hash}.json (cached, 7d TTL)
   +-- data/digests/{YYYY-MM-DD}.md
   +-- data/state.json
@@ -58,7 +59,9 @@ Agent reads digest, enriches brain pages
 
 Poll every 10 minutes with a 2-hour safety lookback across Inbox, Archive, and
 Sent Items. The overlap plus message-ID/conversation-ID state prevents missing
-messages that were replied to and archived before the next poll.
+messages that were replied to and archived before the next poll. Each run is
+saved under `data/runs/`; `data/messages/YYYY-MM-DD.json` is a cumulative daily
+aggregate so later empty runs do not erase earlier messages.
 
 ```bash
 */10 * * * * cd /path/to/gbrain-recipes-outlook && node outlook-collector/collector.mjs collect --folders inbox,archive,sentitems --lookback 2h && node outlook-collector/collector.mjs digest
