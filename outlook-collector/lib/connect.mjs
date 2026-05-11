@@ -24,9 +24,18 @@ export async function createClient(preset = 'mail,users') {
     args.push('--org-mode');
   }
 
+  const env = {
+    ...process.env,
+    MS365_MCP_TOKEN_CACHE_PATH:
+      process.env.MS365_MCP_TOKEN_CACHE_PATH || '/opt/data/ms365-mcp/token-cache.json',
+    MS365_MCP_SELECTED_ACCOUNT_PATH:
+      process.env.MS365_MCP_SELECTED_ACCOUNT_PATH || '/opt/data/ms365-mcp/selected-account.json',
+  };
+
   const transport = new StdioClientTransport({
     command: 'npx',
     args,
+    env,
   });
 
   const client = new Client(
