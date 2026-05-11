@@ -2,7 +2,7 @@
 
 import { probeServer, createClient, disconnect } from './lib/connect.mjs';
 import { loadState, saveState } from './lib/state.mjs';
-import { collectInbox, collectSent } from './lib/mail.mjs';
+import { collectRecentMail, parseFolders } from './lib/mail.mjs';
 import { classifyMessages } from './lib/filter.mjs';
 import { probeOrgMode, enrichWithDirectory } from './lib/directory.mjs';
 import { generateDigest, writeDigest } from './lib/digest.mjs';
@@ -14,15 +14,34 @@ const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(SCRIPT_DIR, '..', 'data');
 const CACHE_DIR = join(DATA_DIR, 'directory');
 
+function parseCollectOptions(argv = process.argv.slice(3)) {
+  const options = { folders: undefined, lookback: undefined };
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === '--folders') {
+      options.folders = parseFolders(argv[++i]);
+    } else if (arg.startsWith('--folders=')) {
+      options.folders = parseFolders(arg.slice('--folders='.length));
+    } else if (arg === '--lookback') {
+      options.lookback = argv[++i];
+    } else if (arg.startsWith('--lookback=')) {
+      options.lookback = arg.slice('--lookback='.length);
+    } else {
+      throw new Error(`Unknown collect option: ${arg}`);
+    }
+  }
+  return options;
+}
+
 async function collect() {
   probeServer();
 
+  const options = parseCollectOptions();
   const state = loadState(DATA_DIR);
   const { client } = await createClient();
 
   try {
-    const messages = await collectInbox(client, state);
-    const sentIds = await collectSent(client, state);
+    const { messages, sentIds } = await collectRecentMail(client, state, options);
 
     const orgMode = await probeOrgMode(client);
 
@@ -46,7 +65,8 @@ async function collect() {
     state.lastCollect = new Date().toISOString();
     saveState(DATA_DIR, state);
 
-    console.log(`Collected ${messages.length} new messages. Digest generated.`);
+    const folderList = parseFolders(options.folders).join(',');
+    console.log(`Collected ${messages.length} new/updated messages from ${folderList}. Digest generated.`);
   } finally {
     await disconnect({ client });
   }
@@ -90,6 +110,6 @@ switch (command) {
     });
     break;
   default:
-    console.error('Usage: collector.mjs <collect|digest>');
+    console.error('Usage: collector.mjs <collect|digest> [--folders inbox,archive,sentitems] [--lookback 2h]');
     process.exit(1);
 }

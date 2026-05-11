@@ -74,10 +74,13 @@ mail access. Do not request write/send/delete scopes unless the user explicitly
 asks for them.
 
 **Collection scope:** normal `collect` is incremental, not a full mailbox
-backfill. On first run it collects the recent window supported by the collector;
-subsequent runs process unseen messages and state-track message IDs. If the
-user asks for historical import, implement an explicit date-range/backfill mode
-instead of deleting `data/state.json` and accidentally reprocessing recent mail.
+backfill. By default it polls Inbox, Archive, and Sent Items with a safety
+lookback window so messages are still captured if the user replies and archives
+before the next polling cycle. Subsequent runs process new messages and updated
+known messages (for example Inbox -> Archive moves) while state-tracking message
+IDs and sent conversation IDs. If the user asks for historical import, implement
+an explicit date-range/backfill mode instead of deleting `data/state.json` and
+accidentally reprocessing recent mail.
 
 ## Architecture
 
@@ -89,8 +92,9 @@ Microsoft 365 Account(s)
   |  (MCP protocol via @modelcontextprotocol/sdk)
   v
 Outlook Collector Script (deterministic Node.js)
-  |  Calls: list-mail-messages, list-mail-folder-messages, list-users
-  |  Handles: pagination, dedup, sent-mail checks, noise filtering,
+  |  Calls: list-mail-folder-messages, list-mail-folders, list-users
+  |  Default folders: Inbox + Archive + Sent Items, with lookback overlap
+  |  Handles: pagination, dedup, sent-mail checks, folder moves, noise filtering,
   |           signature detection, directory cache
   v  Outputs:
   +-- data/messages/{YYYY-MM-DD}.json     (structured email data)
@@ -216,7 +220,8 @@ collector has been validated with `@softeria/ms-365-mcp-server` 0.107.x.
 ```bash
 export MS365_MCP_TOKEN_CACHE_PATH=/opt/data/ms365-mcp/token-cache.json
 export MS365_MCP_SELECTED_ACCOUNT_PATH=/opt/data/ms365-mcp/selected-account.json
-node outlook-collector/collector.mjs collect
+# Default: Inbox + Archive + Sent Items, 2h overlap.
+node outlook-collector/collector.mjs collect --folders inbox,archive,sentitems --lookback 2h
 node outlook-collector/collector.mjs digest
 ```
 
@@ -320,26 +325,34 @@ web link from the immutable message ID and account type. Links are generated in
 CODE, never by the LLM. Every digest entry must include an `[Open in Outlook]`
 link that opens the correct message for the authenticated account.
 
-### Deduplication
+### Deduplication and Lookback Collection
 
 ```pseudo
-collect():
+collect(folders = ['inbox', 'archive', 'sentitems'], lookback = '2h'):
   state = load_state()
-  since = state.lastCollect ? incremental_window_since_last_collect : first_run_recent_window
+  since = state.lastCollect - lookback
 
-  inbox = graph.list_mail_messages(since, max_pages)
-  for msg in inbox:
-    if msg.id in state.knownIds: continue
-    record = build_record(msg)
-    state.knownIds[msg.id] = { seenAt: now() }
-
-  sent = graph.list_folder_messages('SentItems', since)
-  for msg in sent:
-    state.knownIds[msg.id] = { seenAt: now(), isSent: true }
-    sentThreadIds.add(msg.conversationId)
+  for folder in folders:
+    date_field = folder == 'sentitems' ? 'sentDateTime' : 'receivedDateTime'
+    messages = graph.list_mail_folder_messages(folder_id(folder), date_field >= since)
+    for msg in messages:
+      existing = state.knownIds[msg.id]
+      update_state(msg.id, folder, msg.changeKey, msg.lastModifiedDateTime)
+      if folder == 'sentitems':
+        sentThreadIds.add(msg.conversationId)
+      else if !existing or folder/changeKey/lastModified changed:
+        emit msg for digest/enrichment
 ```
 
-**Why sent mail matters:** Without it, the digest can show "awaiting response"
+Use `mailFolderId` (well-known folder IDs or IDs resolved from `list-mail-folders`),
+not display names alone. Folder display names are localized (`Posta in arrivo`,
+`Posta inviata`, etc.).
+
+**Why Inbox + Archive matters:** If the user replies and archives an email before
+the next 10-minute polling cycle, Inbox-only polling can miss it. The Archive
+lookback catches the original message after it moves.
+
+**Why Sent Items matters:** Without it, the digest can show "awaiting response"
 on threads you already replied to. Sent mail acts as a negative filter.
 
 ### Directory Lookup

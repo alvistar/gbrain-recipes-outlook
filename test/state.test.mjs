@@ -18,6 +18,7 @@ describe('loadState', () => {
     const state = loadState(TEST_DIR);
     expect(state.lastCollect).toBeNull();
     expect(state.knownIds).toEqual({});
+    expect(state.folders).toEqual({});
   });
 
   test('loads valid state from file', () => {
