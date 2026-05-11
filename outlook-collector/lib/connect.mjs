@@ -19,7 +19,7 @@ export function probeServer() {
 }
 
 export async function createClient(preset = 'mail,users') {
-  const args = ['-y', '@softeria/ms-365-mcp-server', '--preset', preset];
+  const args = ['-y', '@softeria/ms-365-mcp-server', '--read-only', '--preset', preset];
   if (process.env.MS365_MCP_TENANT_ID) {
     args.push('--org-mode');
   }
