@@ -25,21 +25,18 @@ health_checks:
   - type: any_of
     label: "Microsoft 365 authentication"
     checks:
-      - type: file_exists
-        path: "$MS365_MCP_TOKEN_CACHE_PATH"
+      - type: command
+        command: "test -n \"$MS365_MCP_TOKEN_CACHE_PATH\" && test -f \"$MS365_MCP_TOKEN_CACHE_PATH\""
         label: "Persistent Microsoft 365 token cache"
       - type: command
         command: "npx @softeria/ms-365-mcp-server --read-only --verify-login"
         label: "Read-only Microsoft 365 login"
-  - type: any_of
-    label: "Directory enrichment mode"
+  - type: optional
+    label: "Directory enrichment (org-mode only, not required for mail-only)"
     checks:
       - type: env_exists
         name: MS365_MCP_TENANT_ID
         label: "Azure AD tenant ID for org-mode"
-      - type: command
-        command: "test -z \"$MS365_MCP_TENANT_ID\""
-        label: "Mail-only mode (directory lookup disabled)"
 setup_time: 15 min
 cost_estimate: "$0 (Microsoft Graph API free tier)"
 ---
@@ -258,8 +255,9 @@ email:
    `gbrain timeline-add` for important dated events. Otherwise the timeline
    entry in compiled truth is acceptable.
 8. **Sync/index**: if writing markdown files directly, run
-   `gbrain sync --no-pull --no-embed`. If using `gbrain put`, embeddings happen
-   during the write; verify with `gbrain search`.
+   `gbrain sync --no-pull` to index and embed them. If using `gbrain put`,
+   embeddings happen during the write. Either way, verify with
+   `gbrain search "sender name"` to confirm pages are findable.
 
 ### Step 5: Set Up Cron
 
@@ -333,11 +331,11 @@ collect():
   for msg in inbox:
     if msg.id in state.knownIds: continue
     record = build_record(msg)
-    state.knownIds[msg.id] = record.summary
+    state.knownIds[msg.id] = { seenAt: now() }
 
-  sent = graph.list_folder_messages('sentitems', since)
+  sent = graph.list_folder_messages('SentItems', since)
   for msg in sent:
-    state.knownIds[msg.id] = { is_sent: true }
+    state.knownIds[msg.id] = { seenAt: now(), isSent: true }
     sentThreadIds.add(msg.conversationId)
 ```
 
@@ -347,8 +345,9 @@ on threads you already replied to. Sent mail acts as a negative filter.
 ### Directory Lookup
 
 For work/school accounts with `--org-mode`, the collector resolves each unique
-sender against Azure AD using `$filter=mail eq '{email}'`. Results are cached for
-7 days. The digest includes the sender's title, department, and company when
+sender against Azure AD using an OData filter (`$filter=mail eq '...'`). Email
+addresses must be escaped for OData (single quotes doubled) to prevent filter
+injection via crafted sender addresses. Results are cached for 7 days. The digest includes the sender's title, department, and company when
 available.
 
 Use `--refresh-directory` to force re-fetch all cached directory entries.
